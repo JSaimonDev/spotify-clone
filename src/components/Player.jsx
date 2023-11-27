@@ -1,5 +1,6 @@
+import { Slider } from "@/components/ui/slider"
 import { usePlayerStore } from "@/store/playerStore"
-import { useState, useRef, useEffect } from "react"
+import { useRef, useEffect, useState } from "react"
 
 export const Pause = ({ className }) => (
   <svg className={className} role="img" height="16" width="16" aria-hidden="true" viewBox="0 0 16 16"><path d="M2.7 1a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7H2.7zm8 0a.7.7 0 0 0-.7.7v12.6a.7.7 0 0 0 .7.7h2.6a.7.7 0 0 0 .7-.7V1.7a.7.7 0 0 0-.7-.7h-2.6z"></path></svg>
@@ -35,21 +36,107 @@ const CurrentSong = ({ image, title, artists }) => {
         </div>
     )
 }
+
+const SongControl = ({audio}) => {
+    const [currentTime, setCurrentTime] = useState(0)
+
+    useEffect(() => {
+        audio.current.addEventListener('timeupdate', handleTimeUpdate)
+        return () => {
+            audio.current.removeEventListener('timeupdate', handleTimeUpdate)
+        }
+    },[])
+
+    const handleTimeUpdate = () => {
+        setCurrentTime(audio.current.currentTime)
+    }
+
+    const formatTime = time => {
+        if (time === null) return '0:00'
+
+        const seconds = Math.floor(time % 60)
+        const minutes = Math.floor(time / 60)
+
+        return `${minutes}:${seconds.toString().padStart(2, '0')}`
+    }
+
+    const duration = audio?.current?.duration ?? 0
+
+    return (
+        <div className="flex gap-3 tex-xs pt-2">
+            <span className="opacity-50 w-12 text-right">{formatTime(currentTime)}</span>
+            <Slider
+                defaultValue={[0]}
+                value={[currentTime]}
+            max={audio?.current?.duration ?? 0}
+            min={0}
+            className="w-[500px]"
+            onValueChange={(value) => {
+                audio.current.currentTime = value
+                }}
+            />
+            <span className="opacity-50 w-12">{duration ? formatTime(duration): null}</span>
+        </div>
+    )
+}
+
+const VolumeControl = () => {
+    const volume = usePlayerStore(state => state.volume)
+    const setVolume = usePlayerStore(state => state.setVolume)
+    const previousVolumeRef = useRef(volume)
+
+    const isVolumeSilenced = volume < 0.1
+
+    const handleClickVolume = () => {
+        if (isVolumeSilenced) {
+            setVolume(previousVolumeRef.current)
+        } else {
+            previousVolumeRef.current = volume
+            setVolume(0)
+        }
+    }
+
+    return (
+        <div className="flex justify-center gap-x-2">
+            <button onClick={handleClickVolume}
+                className="opacity-70 hover:opacity-100 transition">
+            {volume < 0.1 ? <VolumeSilence /> : <Volume />}
+        </button>
+        <Slider
+            defaultValue={[100]}
+            max={100}
+            min={0}
+            volume={[volume * 100]}
+            className="w-[95px]"
+            onValueChange={(value) => {
+                const [newVolume] = value
+                const volumeValue = newVolume / 100
+                setVolume(volumeValue)
+                }}
+            />
+        </div>
+    )
+}
   
 export const Player = () => {
-    const {currentMusic, isPlaying, setIsPlaying } = usePlayerStore(state => state)
+    const {currentMusic, isPlaying, setIsPlaying, volume } = usePlayerStore(state => state)
     const audioRef = useRef()
 
     useEffect(() => {
         isPlaying
         ? audioRef.current.play()
         : audioRef.current.pause()
-    },[isPlaying])
+    }, [isPlaying])
+    
+    useEffect(() => {
+        audioRef.current.volume = volume
+    },[volume])
     
     useEffect(() => {
         const {song, playlist, songs} = currentMusic
         if (song) {
             audioRef.current.src = `/music/${playlist?.id}/0${song.id}.mp3`
+            audioRef.current.volume = volume
             audioRef.current.play()
         }
     },[currentMusic])
@@ -69,14 +156,15 @@ export const Player = () => {
                 <CurrentSong {...currentMusic.song} />
             </div>
             <div className="grid place-content-center gap-4 flex-1">
-                <div>
+                <div className="flex items-center flex-col justify-center">
                     <button className="bg-white rounded-full p-2" onClick={handleClick}>
                         {isPlaying ? <Pause /> : <Play />}
                     </button>
+                    <SongControl audio={audioRef}/>
                 </div>
             </div>
-            <div>
-                Volumen
+            <div className="grid place-content-center">
+                <VolumeControl />
             </div>
             <audio ref={audioRef} />
         </div>
